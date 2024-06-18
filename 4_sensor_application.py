@@ -95,7 +95,7 @@ async def connect_to_sensor(device, sensor_id, char_uuid):
         if client.is_connected:
             await client.start_notify(char_uuid, lambda sender, data: asyncio.create_task(notification_handler(sender, data, sensor_id)))
             while not STOP_FLAG:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.05)
         else:
             print(f"Failed to connect to {device.name}")
 
