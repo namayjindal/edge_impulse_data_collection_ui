@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime
 from bleak import BleakScanner, BleakClient
 from PyQt5.QtWidgets import (QApplication, QWizard, QWizardPage, QLabel, QLineEdit, QVBoxLayout, QDateEdit, QPushButton, QComboBox, QMessageBox, QInputDialog)
-from PyQt5.QtCore import QDate, QThread, pyqtSignal, QTimer, QObject, QMetaObject, Qt, Q_ARG
+from PyQt5.QtCore import QDate, QThread, pyqtSignal, QTimer, QObject, Qt
 
 # UUIDs and other data
 UART_SERVICE_UUIDS = [
@@ -26,6 +26,7 @@ MAX_ERRORS = 4
 class GuiUpdater(QObject):
     showMessageSignal = pyqtSignal(str)
     stopExerciseSignal = pyqtSignal()
+    stopForErrorsSignal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -39,6 +40,7 @@ class GuiUpdater(QObject):
 gui_updater = GuiUpdater()
 gui_updater.showMessageSignal.connect(gui_updater.show_message)
 gui_updater.stopExerciseSignal.connect(gui_updater.stop_exercise)
+gui_updater.stopForErrorsSignal.connect(gui_updater.show_message)
 
 async def notification_handler(sender, data, sensor_id):
     global buffers, start_times, STOP_FLAG, error_counter
@@ -87,15 +89,15 @@ async def notification_handler(sender, data, sensor_id):
             error_counter += 1
             print(f"Error: {e}. Received line: {line}")
             if error_counter >= MAX_ERRORS:
-                QMetaObject.invokeMethod(gui_updater, "stop_exercise", Qt.QueuedConnection)
-                QMetaObject.invokeMethod(gui_updater, "showMessageSignal", Qt.QueuedConnection, Q_ARG(str, "Bad data, stop and restart"))
+                QTimer.singleShot(0, gui_updater.stopExerciseSignal.emit)
+                QTimer.singleShot(0, lambda: gui_updater.stopForErrorsSignal.emit("Bad data, stop and restart"))
 
 async def connect_to_sensor(device, sensor_id, char_uuid):
     async with BleakClient(device) as client:
         if client.is_connected:
             await client.start_notify(char_uuid, lambda sender, data: asyncio.create_task(notification_handler(sender, data, sensor_id)))
             while not STOP_FLAG:
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.1)
         else:
             print(f"Failed to connect to {device.name}")
 
@@ -106,6 +108,7 @@ async def scan_and_connect():
         for device in devices:
             if device.name == name:
                 tasks.append(connect_to_sensor(device, UART_SERVICE_UUIDS.index((name, service_uuid, char_uuid)) + 1, char_uuid))
+                break  # Ensure one device per sensor type configured
     await asyncio.gather(*tasks)
 
 class AsyncRunner(QThread):
@@ -114,7 +117,6 @@ class AsyncRunner(QThread):
 
     async def scan_and_connect(self):
         await scan_and_connect()
-        self.updateStatus.emit("Connected to sensors. Tracking exercises now.")
         self.sensorsConnected.emit()
 
     def run(self):
@@ -286,6 +288,7 @@ class MainPage(QWizardPage):
     def start_timer(self):
         self.elapsed_time = 0
         self.timer.start(1000)
+        self.setStatus("Connected to sensors. Tracking exercises now.")
 
     def update_timer(self):
         self.elapsed_time += 1
