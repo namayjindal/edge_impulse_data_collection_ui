@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime
 from bleak import BleakScanner, BleakClient
 from PyQt5.QtWidgets import (QApplication, QWizard, QWizardPage, QLabel, QLineEdit, QVBoxLayout, QDateEdit, QPushButton, QComboBox, QMessageBox, QInputDialog)
-from PyQt5.QtCore import QDate, QThread, pyqtSignal, QTimer
+from PyQt5.QtCore import QDate, QThread, pyqtSignal, QTimer, QObject, QMetaObject, Qt, Q_ARG
 
 # UUIDs and other data
 UART_SERVICE_UUIDS = [
@@ -22,6 +22,23 @@ csv_filename = ""
 STOP_FLAG = False
 error_counter = 0
 MAX_ERRORS = 4
+
+class GuiUpdater(QObject):
+    showMessageSignal = pyqtSignal(str)
+    stopExerciseSignal = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+
+    def show_message(self, message):
+        QMessageBox.warning(None, "Warning", message)
+
+    def stop_exercise(self):
+        ex.stopExercise()
+
+gui_updater = GuiUpdater()
+gui_updater.showMessageSignal.connect(gui_updater.show_message)
+gui_updater.stopExerciseSignal.connect(gui_updater.stop_exercise)
 
 async def notification_handler(sender, data, sensor_id):
     global buffers, start_times, STOP_FLAG, error_counter
@@ -41,16 +58,21 @@ async def notification_handler(sender, data, sensor_id):
             continue
 
         try:
+            parts = line.split(',')
+            if len(parts) != 6:  # Ensure we have exactly 6 values
+                raise ValueError(f"Incorrect number of values: {len(parts)}. Received line: {line}")
+
+            imu_values = list(map(float, parts))  # Convert to float
+
             elapsed_time = (datetime.now() - start_times[sensor_id]).total_seconds() * 1000
-            imu_values = list(map(float, line.split(',')))
-            if len(imu_values) != 6:
-                raise ValueError(f"Incorrect number of values: {len(imu_values)}")
             sensor_data[sensor_id]["timestamp"] = elapsed_time
             sensor_data[sensor_id]["values"] = imu_values
 
             if all(sensor_data[i]["values"][0] is not None for i in range(1, 5)):
                 timestamp = round(sensor_data[1]["timestamp"], 3)
-                row = [timestamp] + sensor_data[1]["values"] + sensor_data[2]["values"] + sensor_data[3]["values"] + sensor_data[4]["values"]
+                row = [timestamp] + \
+                      sensor_data[1]["values"] + sensor_data[2]["values"] + \
+                      sensor_data[3]["values"] + sensor_data[4]["values"]
                 if len(row) != 25:
                     raise ValueError("Row has an incorrect number of values")
 
@@ -65,13 +87,13 @@ async def notification_handler(sender, data, sensor_id):
             error_counter += 1
             print(f"Error: {e}. Received line: {line}")
             if error_counter >= MAX_ERRORS:
-                ex.stopExercise()
-                QMessageBox.warning(ex, "Warning", "Bad data, stop and restart")
+                QMetaObject.invokeMethod(gui_updater, "stop_exercise", Qt.QueuedConnection)
+                QMetaObject.invokeMethod(gui_updater, "showMessageSignal", Qt.QueuedConnection, Q_ARG(str, "Bad data, stop and restart"))
 
 async def connect_to_sensor(device, sensor_id, char_uuid):
     async with BleakClient(device) as client:
         if client.is_connected:
-            await client.start_notify(char_uuid, (lambda sender, data: asyncio.create_task(notification_handler(sender, data, sensor_id))))
+            await client.start_notify(char_uuid, lambda sender, data: asyncio.create_task(notification_handler(sender, data, sensor_id)))
             while not STOP_FLAG:
                 await asyncio.sleep(0.1)
         else:
