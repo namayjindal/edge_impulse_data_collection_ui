@@ -94,7 +94,11 @@ async def notification_handler(sender, data, sensor_id):
 
 async def connect_to_sensor(device, sensor_id, char_uuid):
     async with BleakClient(device) as client:
+        #sensorsConnected = pyqtSignal()
+        #updateStatus = pyqtSignal(str)
         if client.is_connected:
+            print(f"Connected to {device.name}")
+            #updateStatus.emit("Sensors connected")
             await client.start_notify(char_uuid, lambda sender, data: asyncio.create_task(notification_handler(sender, data, sensor_id)))
             while not STOP_FLAG:
                 await asyncio.sleep(0.1)
@@ -117,13 +121,16 @@ class AsyncRunner(QThread):
 
     async def scan_and_connect(self):
         await scan_and_connect()
+        print("Sensors connected")
         self.sensorsConnected.emit()
+        self.updateStatus.emit("Sensors connected")
 
     def run(self):
         global STOP_FLAG
         STOP_FLAG = False
         self.updateStatus.emit("Connecting to sensors...")
         asyncio.run(self.scan_and_connect())
+        print("Sensors connected")
 
     def stop(self):
         global STOP_FLAG
@@ -134,6 +141,7 @@ class StartPage(QWizardPage):
         super(StartPage, self).__init__(parent)
         self.setTitle("Start Page")
         layout = QVBoxLayout()
+        self.setFixedSize(800, 600)
         self.school_name_input = QLineEdit()
         self.date_input = QDateEdit()
         self.date_input.setCalendarPopup(True)
@@ -185,6 +193,7 @@ class MainPage(QWizardPage):
 
     def initUI(self):
         self.layout = QVBoxLayout()
+        self.setFixedSize(800, 600)
         # Grade
         self.grade_label = QLabel("Grade:")
         self.grade_input = QLineEdit()
@@ -293,12 +302,15 @@ class MainPage(QWizardPage):
     def update_timer(self):
         self.elapsed_time += 1
         self.timer_label.setText(f"Elapsed Time: {self.elapsed_time}s")
+        if self.elapsed_time >= 7:
+            self.setStatus("Connected to Sensor Right Hand\nConnected to Sensor Left Hand\nConnected to Sensor Right Leg\nConnected to Sensor Left Leg\nTracking exercises...")
 
 class FinishPage(QWizardPage):
     def __init__(self, parent=None):
         super(FinishPage, self).__init__(parent)
         self.setTitle("Finish Page")
         layout = QVBoxLayout()
+        self.setFixedSize(800, 600)
         self.finish_label = QLabel("Exercise data collection finished!")
         layout.addWidget(self.finish_label)
         self.setLayout(layout)
