@@ -138,8 +138,8 @@ class AsyncConnector(QThread):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(self.scan_and_connect())
-        print("Sensors connected.")
         loop.close()
+        print("Sensors connected.")
     
     async def scan_and_connect(self):
         await connect_sensors()
