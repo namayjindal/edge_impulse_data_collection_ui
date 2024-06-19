@@ -24,7 +24,7 @@ error_counter = 0
 MAX_ERRORS = 4
 
 # Load exercise configuration from a JSON file
-with open('exercise_config.json') as f:
+with open('./updated_application/exercise_config.json') as f:
     EXERCISE_CONFIG = json.load(f)
 
 # Define global variable for selected exercise configuration
@@ -39,7 +39,9 @@ class GuiUpdater(QObject):
         super().__init__()
 
     def show_message(self, message):
-        QMessageBox.warning(None, "Warning", message)
+        msgBox = QMessageBox()
+        msgBox.setText(message)
+        msgBox.exec()
 
     def stop_exercise(self):
         ex.stopExercise()
@@ -99,12 +101,15 @@ async def connect_to_sensor(device, sensor_id, char_uuid):
 async def scan_and_connect():
     tasks = []
     devices = await BleakScanner.discover()
+    connected_sensors = []
     for sensor in selected_exercise_config["sensors"]:
         name, service_uuid, char_uuid = UART_SERVICE_UUIDS[sensor-1]
         for device in devices:
             if device.name == name:
                 tasks.append(connect_to_sensor(device, sensor, char_uuid))
+                connected_sensors.append(name)
                 break
+    gui_updater.showMessageSignal.emit(f"Connected to: {', '.join(connected_sensors)}")
     await asyncio.gather(*tasks)
 
 class AsyncRunner(QThread):
@@ -183,7 +188,7 @@ class MainPage(QWizardPage):
 
     def initUI(self):
         self.layout = QVBoxLayout()
-        self.setFixedSize(500, 400)
+        self.setFixedSize(500, 500)
         self.grade_label = QLabel("Grade:")
         self.grade_input = QLineEdit()
         self.layout.addWidget(self.grade_label)
@@ -240,7 +245,7 @@ class MainPage(QWizardPage):
     def stopExercise(self):
         self.async_runner.stop()
         self.async_runner.wait()
-        self.timer.stop()
+        self.timer.stop()  # Ensure the timer stops here
         msgBox = QMessageBox(self)
         msgBox.setIcon(QMessageBox.Question)
         msgBox.setText("Do you want to keep the data?")
@@ -266,6 +271,7 @@ class MainPage(QWizardPage):
         self.toggle_timer_label(False)
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
+        self.timer.stop()  # Ensure the timer stops here too
 
     def start_timer(self):
         self.elapsed_time = 0
@@ -276,7 +282,8 @@ class MainPage(QWizardPage):
         self.elapsed_time += 1
         self.timer_label.setText(f"Elapsed Time: {self.elapsed_time}s")
         if self.elapsed_time >= 7:
-            self.setStatus("Connected to Sensor Right Hand\nConnected to Sensor Left Hand\nConnected to Sensor Right Leg\nConnected to Sensor Left Leg\nTracking exercises...")
+            self.setStatus("Tracking exercises now...")
+
 
 class ExerciseApp(QWizard):
     def __init__(self):
