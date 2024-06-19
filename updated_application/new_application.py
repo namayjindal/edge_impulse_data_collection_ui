@@ -1,8 +1,8 @@
-# Import the necessary libraries
 import sys
 import os
 import csv
 import asyncio
+import json
 from datetime import datetime
 from bleak import BleakScanner, BleakClient
 from PyQt5.QtWidgets import (QApplication, QWizard, QWizardPage, QLabel, QLineEdit, QVBoxLayout, QDateEdit, QPushButton, QComboBox, QMessageBox, QInputDialog)
@@ -23,22 +23,9 @@ STOP_FLAG = False
 error_counter = 0
 MAX_ERRORS = 4
 
-# Add new dictionary for exercise configurations
-EXERCISE_CONFIG = {
-    "Push-up": {"sensors": [1, 2, 3, 4], "columns": ['timestamp', 'right_hand_Accel_X', 'right_hand_Accel_Y', 'right_hand_Accel_Z', 'right_hand_Gyro_X', 'right_hand_Gyro_Y', 'right_hand_Gyro_Z',
-                                                    'left_hand_Accel_X', 'left_hand_Accel_Y', 'left_hand_Accel_Z', 'left_hand_Gyro_X', 'left_hand_Gyro_Y', 'left_hand_Gyro_Z',
-                                                    'right_leg_Accel_X', 'right_leg_Accel_Y', 'right_leg_Accel_Z', 'right_leg_Gyro_X', 'right_leg_Gyro_Y', 'right_leg_Gyro_Z',
-                                                    'left_leg_Accel_X', 'left_leg_Accel_Y', 'left_leg_Accel_Z', 'left_leg_Gyro_X', 'left_leg_Gyro_Y', 'left_leg_Gyro_Z']},
-    "Squat": {"sensors": [3, 4], "columns": ['timestamp', 'right_leg_Accel_X', 'right_leg_Accel_Y', 'right_leg_Accel_Z', 'right_leg_Gyro_X', 'right_leg_Gyro_Y', 'right_leg_Gyro_Z',
-                                             'left_leg_Accel_X', 'left_leg_Accel_Y', 'left_leg_Accel_Z', 'left_leg_Gyro_X', 'left_leg_Gyro_Y', 'left_leg_Gyro_Z']},
-    "Jumping Jack": {"sensors": [1, 2, 3, 4], "columns": ['timestamp', 'right_hand_Accel_X', 'right_hand_Accel_Y', 'right_hand_Accel_Z', 'right_hand_Gyro_X', 'right_hand_Gyro_Y', 'right_hand_Gyro_Z',
-                                                         'left_hand_Accel_X', 'left_hand_Accel_Y', 'left_hand_Accel_Z', 'left_hand_Gyro_X', 'left_hand_Gyro_Y', 'left_hand_Gyro_Z',
-                                                         'right_leg_Accel_X', 'right_leg_Accel_Y', 'right_leg_Accel_Z', 'right_leg_Gyro_X', 'right_leg_Gyro_Y', 'right_leg_Gyro_Z',
-                                                         'left_leg_Accel_X', 'left_leg_Accel_Y', 'left_leg_Accel_Z', 'left_leg_Gyro_X', 'left_leg_Gyro_Y', 'left_leg_Gyro_Z']},
-    "Burpee": {"sensors": [1, 2, 3], "columns": ['timestamp', 'right_hand_Accel_X', 'right_hand_Accel_Y', 'right_hand_Accel_Z', 'right_hand_Gyro_X', 'right_hand_Gyro_Y', 'right_hand_Gyro_Z',
-                                                 'left_hand_Accel_X', 'left_hand_Accel_Y', 'left_hand_Accel_Z', 'left_hand_Gyro_X', 'left_hand_Gyro_Y', 'left_hand_Gyro_Z',
-                                                 'right_leg_Accel_X', 'right_leg_Accel_Y', 'right_leg_Accel_Z', 'right_leg_Gyro_X', 'right_leg_Gyro_Y', 'right_leg_Gyro_Z']}
-}
+# Load exercise configuration from a JSON file
+with open('exercise_config.json') as f:
+    EXERCISE_CONFIG = json.load(f)
 
 # Define global variable for selected exercise configuration
 selected_exercise_config = None
@@ -139,6 +126,55 @@ class AsyncRunner(QThread):
         global STOP_FLAG
         STOP_FLAG = True
 
+class StartPage(QWizardPage):
+    def __init__(self, parent=None):
+        super(StartPage, self).__init__(parent)
+        self.setTitle("Start Page")
+        layout = QVBoxLayout()
+        #self.setFixedSize(500, 400)
+        self.school_name_input = QLineEdit()
+        self.date_input = QDateEdit()
+        self.date_input.setCalendarPopup(True)
+        self.date_input.setDisplayFormat('dd/MM/yyyy')
+        self.date_input.setDate(QDate.currentDate())
+        layout.addWidget(QLabel("School Name:"))
+        layout.addWidget(self.school_name_input)
+        layout.addWidget(QLabel("Date:"))
+        layout.addWidget(self.date_input)
+        self.setLayout(layout)
+
+    def initializePage(self):
+        self.school_name_input.setText(get_saved_school_name())
+        self.date_input.setDate(get_saved_date())
+
+    def validatePage(self):
+        save_school_name(self.school_name_input.text())
+        save_date(self.date_input.date())
+        return True
+
+def save_school_name(name):
+    with open('school_name.txt', 'w') as f:
+        f.write(name)
+
+def get_saved_school_name():
+    try:
+        with open('school_name.txt', 'r') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+
+def save_date(date):
+    with open('date.txt', 'w') as f:
+        f.write(date.toString("yyyyMMdd"))
+
+def get_saved_date():
+    try:
+        with open('date.txt', 'r') as f:
+            date_str = f.read().strip()
+            return QDate.fromString(date_str, "yyyyMMdd")
+    except FileNotFoundError:
+        return QDate.currentDate()
+
 class MainPage(QWizardPage):
     def __init__(self, parent=None):
         super(MainPage, self).__init__(parent)
@@ -154,7 +190,7 @@ class MainPage(QWizardPage):
         self.layout.addWidget(self.grade_input)
         self.exercise_name_label = QLabel("Exercise Name:")
         self.exercise_name_dropdown = QComboBox()
-        self.exercise_name_dropdown.addItems(["Push-up", "Squat", "Jumping Jack", "Burpee"])
+        self.exercise_name_dropdown.addItems(list(EXERCISE_CONFIG.keys()))
         self.layout.addWidget(self.exercise_name_label)
         self.layout.addWidget(self.exercise_name_dropdown)
         self.status_label = QLabel("")
@@ -262,55 +298,6 @@ class FinishPage(QWizardPage):
         self.finish_label = QLabel("Exercise data collection finished!")
         layout.addWidget(self.finish_label)
         self.setLayout(layout)
-
-class StartPage(QWizardPage):
-    def __init__(self, parent=None):
-        super(StartPage, self).__init__(parent)
-        self.setTitle("Start Page")
-        layout = QVBoxLayout()
-        #self.setFixedSize(500, 400)
-        self.school_name_input = QLineEdit()
-        self.date_input = QDateEdit()
-        self.date_input.setCalendarPopup(True)
-        self.date_input.setDisplayFormat('dd/MM/yyyy')
-        self.date_input.setDate(QDate.currentDate())
-        layout.addWidget(QLabel("School Name:"))
-        layout.addWidget(self.school_name_input)
-        layout.addWidget(QLabel("Date:"))
-        layout.addWidget(self.date_input)
-        self.setLayout(layout)
-
-    def initializePage(self):
-        self.school_name_input.setText(get_saved_school_name())
-        self.date_input.setDate(get_saved_date())
-
-    def validatePage(self):
-        save_school_name(self.school_name_input.text())
-        save_date(self.date_input.date())
-        return True
-
-def save_school_name(name):
-    with open('school_name.txt', 'w') as f:
-        f.write(name)
-
-def get_saved_school_name():
-    try:
-        with open('school_name.txt', 'r') as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        return ""
-
-def save_date(date):
-    with open('date.txt', 'w') as f:
-        f.write(date.toString("yyyyMMdd"))
-
-def get_saved_date():
-    try:
-        with open('date.txt', 'r') as f:
-            date_str = f.read().strip()
-            return QDate.fromString(date_str, "yyyyMMdd")
-    except FileNotFoundError:
-        return QDate.currentDate()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

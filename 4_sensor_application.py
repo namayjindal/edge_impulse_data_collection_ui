@@ -101,7 +101,7 @@ async def connect_to_sensor(device, sensor_id, char_uuid):
             #updateStatus.emit("Sensors connected")
             await client.start_notify(char_uuid, lambda sender, data: asyncio.create_task(notification_handler(sender, data, sensor_id)))
             while not STOP_FLAG:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.5)
         else:
             print(f"Failed to connect to {device.name}")
 
@@ -141,7 +141,7 @@ class StartPage(QWizardPage):
         super(StartPage, self).__init__(parent)
         self.setTitle("Start Page")
         layout = QVBoxLayout()
-        self.setFixedSize(800, 600)
+        #self.setFixedSize(500, 400)
         self.school_name_input = QLineEdit()
         self.date_input = QDateEdit()
         self.date_input.setCalendarPopup(True)
@@ -193,7 +193,7 @@ class MainPage(QWizardPage):
 
     def initUI(self):
         self.layout = QVBoxLayout()
-        self.setFixedSize(800, 600)
+        self.setFixedSize(500, 400)
         # Grade
         self.grade_label = QLabel("Grade:")
         self.grade_input = QLineEdit()
@@ -290,6 +290,7 @@ class MainPage(QWizardPage):
             os.remove(csv_filename)
             self.setStatus("Data discarded")
         self.elapsed_time = 0
+        self.timer_label.setText("Elapsed Time: 0s")
         self.toggle_timer_label(False)
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
@@ -310,7 +311,7 @@ class FinishPage(QWizardPage):
         super(FinishPage, self).__init__(parent)
         self.setTitle("Finish Page")
         layout = QVBoxLayout()
-        self.setFixedSize(800, 600)
+        self.setFixedSize(500, 400)
         self.finish_label = QLabel("Exercise data collection finished!")
         layout.addWidget(self.finish_label)
         self.setLayout(layout)
